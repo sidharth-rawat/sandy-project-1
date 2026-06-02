@@ -43,7 +43,7 @@ export function SignupForm() {
 
   return (
     <div className="w-full max-w-md">
-      <Card className="w-full max-w-md">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle>Create an account</CardTitle>
           <CardDescription>
@@ -65,7 +65,7 @@ export function SignupForm() {
                 className={cn(errors.fullName && "border-destructive")}
               />
               {errors.fullName && (
-                <p className="text-sm text-red-500">{errors.fullName.message}</p>
+                <p className="text-sm text-destructive">{errors.fullName.message}</p>
               )}
             </div>
 
@@ -81,7 +81,7 @@ export function SignupForm() {
                 className={cn(errors.email && "border-destructive")}
               />
               {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
+                <p className="text-sm text-destructive">{errors.email.message}</p>
               )}
             </div>
 
@@ -97,7 +97,7 @@ export function SignupForm() {
                 className={cn(errors.phoneNumber && "border-destructive")}
               />
               {errors.phoneNumber && (
-                <p className="text-sm text-red-500">{errors.phoneNumber.message}</p>
+                <p className="text-sm text-destructive">{errors.phoneNumber.message}</p>
               )}
             </div>
 

@@ -41,7 +41,7 @@ export function LoginForm() {
 
   return (
     <div className="w-full max-w-md">
-      <Card className="w-full max-w-md">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle>Welcome back</CardTitle>
           <CardDescription>
@@ -63,7 +63,7 @@ export function LoginForm() {
                 className={cn(errors.email && "border-destructive")}
               />
               {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
+                <p className="text-sm text-destructive">{errors.email.message}</p>
               )}
             </div>
 
@@ -79,7 +79,7 @@ export function LoginForm() {
                 className={cn(errors.password && "border-destructive")}
               />
               {errors.password && (
-                <p className="text-sm text-red-500">{errors.password.message}</p>
+                <p className="text-sm text-destructive">{errors.password.message}</p>
               )}
             </div>
 

@@ -12,7 +12,7 @@ export function DashboardPage() {
 
   return (
     <div className="bg-background text-foreground min-h-screen">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b px-6 py-3">
+      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-6 py-3">
         <span className="text-lg font-semibold">Sandy</span>
         <Button variant="outline" size="sm" onClick={handleLogout}>
           Logout
