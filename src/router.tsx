@@ -5,6 +5,7 @@ import { SignupPage } from "@/pages/SignupPage"
 import { VerifyPage } from "@/pages/VerifyPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 
+// eslint-disable-next-line react-refresh/only-export-components
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!isLoggedIn()) {
     return <Navigate to="/login" replace />
