@@ -1,0 +1,5 @@
+# SPA fallback: serve index.html for every route so React Router handles
+# client-side navigation (fixes 404 on refresh / deep links like /login).
+# Lives in public/ so Vite copies it into dist/ — Netlify always honors a
+# _redirects file in the published folder, regardless of deploy method.
+/*    /index.html   200
