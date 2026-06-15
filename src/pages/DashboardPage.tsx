@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useCallback, useEffect } from "react"
 import type { ReactNode } from "react"
 import { useNavigate } from "react-router-dom"
 import {
@@ -16,57 +16,33 @@ import {
   X,
 } from "lucide-react"
 
-import { logout } from "@/lib/auth"
+import { getProfile, logout, type Profile } from "@/lib/auth"
+import { ApiError } from "@/lib/api"
+import {
+  createDeposit,
+  createWithdrawal,
+  getSettings,
+  getTransactions,
+  getWallet,
+  type PublicSettings,
+  type Transaction,
+  type Wallet,
+} from "@/lib/account"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const WALLET = {
-  balance: 12_500.0,
-  equivalentAmount: 1_043_250.0,
-  upcomingDividendAmount: 250.0,
-  upcomingDividendDate: "12 June 2025",
-  numberOfTokens: 100,
-  adminRate: 125.0,
-}
-
-interface Transaction {
-  id: number
-  type: "deposit" | "withdrawal"
-  amount: number
-  referenceNumber: string
-  notes: string
-}
-
-const TRANSACTIONS: Transaction[] = [
-  { id:  1, type: "deposit",    amount: 5_000, referenceNumber: "REF-2025-001", notes: "Initial deposit" },
-  { id:  2, type: "withdrawal", amount: 1_000, referenceNumber: "REF-2025-002", notes: "Partial withdrawal" },
-  { id:  3, type: "deposit",    amount: 3_000, referenceNumber: "REF-2025-003", notes: "Monthly contribution" },
-  { id:  4, type: "withdrawal", amount:   500, referenceNumber: "REF-2025-004", notes: "Service fee" },
-  { id:  5, type: "deposit",    amount: 2_000, referenceNumber: "REF-2025-005", notes: "Dividend reinvestment" },
-  { id:  6, type: "withdrawal", amount: 1_500, referenceNumber: "REF-2025-006", notes: "Emergency withdrawal" },
-  { id:  7, type: "deposit",    amount: 8_000, referenceNumber: "REF-2025-007", notes: "Bonus deposit" },
-  { id:  8, type: "withdrawal", amount:   250, referenceNumber: "REF-2025-008", notes: "Admin fee" },
-  { id:  9, type: "deposit",    amount: 4_500, referenceNumber: "REF-2025-009", notes: "Quarterly top-up" },
-  { id: 10, type: "withdrawal", amount:   750, referenceNumber: "REF-2025-010", notes: "Platform fee" },
-  { id: 11, type: "deposit",    amount: 6_200, referenceNumber: "REF-2025-011", notes: "Wire transfer" },
-  { id: 12, type: "withdrawal", amount: 2_300, referenceNumber: "REF-2025-012", notes: "Scheduled payout" },
-]
-
-const USER = {
-  name: "Demo",
-  email: "Demo@example.com",
-  contactNo: "+91 (123) 456-789",
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function usd(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—"
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
 }
 
 // ─── Wallet Card ──────────────────────────────────────────────────────────────
@@ -96,7 +72,7 @@ function StatCell({
   )
 }
 
-function WalletCard() {
+function WalletCard({ wallet }: { wallet: Wallet }) {
   return (
     <Card className="gap-0 overflow-hidden py-0">
       {/* Hero gradient */}
@@ -111,10 +87,10 @@ function WalletCard() {
             Wallet Balance
           </p>
           <p className="text-primary-foreground mt-2 font-mono text-[2.5rem] font-bold tabular-nums leading-none tracking-tight">
-            ${usd(WALLET.balance)}
+            ${usd(wallet.walletBalance)}
           </p>
           <p className="text-primary-foreground/45 mt-2 font-mono text-sm tabular-nums">
-            ≈&nbsp;₹{WALLET.equivalentAmount.toLocaleString("en-IN")}
+            ≈&nbsp;₹{wallet.equivalentAmount.toLocaleString("en-IN")}
           </p>
         </div>
       </div>
@@ -124,36 +100,38 @@ function WalletCard() {
         <StatCell
           icon={<Coins className="size-3" />}
           label="Tokens"
-          value={String(WALLET.numberOfTokens)}
+          value={String(wallet.tokenCount)}
         />
         <StatCell
           icon={<TrendingUp className="size-3" />}
           label="Token Rate"
-          value={`$${usd(WALLET.adminRate)}`}
-          // sub={`× ${WALLET.numberOfTokens} = $${usd(tokenValue)}`}
+          value={`$${usd(wallet.tokenPrice)}`}
         />
         <StatCell
           icon={<CalendarDays className="size-3" />}
           label="Dividend"
-          value={`$${usd(WALLET.upcomingDividendAmount)}`}
-          
+          value={`$${usd(wallet.upcomingDividendAmount)}`}
         />
         <StatCell
           icon={<CalendarDays className="size-3" />}
           label="Dividend Date"
-          value={WALLET.upcomingDividendDate}
-          // sub={WALLET.upcomingDividendDate}
+          value={formatDate(wallet.upcomingDividendDate)}
         />
       </div>
-      
     </Card>
   )
 }
 
 // ─── Transaction History ──────────────────────────────────────────────────────
 
+const statusStyles: Record<Transaction["status"], string> = {
+  PENDING: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  APPROVED: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  REJECTED: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+}
+
 function TransactionRow({ tx }: { tx: Transaction }) {
-  const isDeposit = tx.type === "deposit"
+  const isDeposit = tx.type === "DEPOSIT"
 
   return (
     <div className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/40">
@@ -173,9 +151,9 @@ function TransactionRow({ tx }: { tx: Transaction }) {
       </div>
 
       {/* Type */}
-      <span className="w-20 shrink-0 text-sm font-medium capitalize">{tx.type}</span>
+      <span className="w-20 shrink-0 text-sm font-medium capitalize">{tx.type.toLowerCase()}</span>
 
-      {/* Amount */}
+      {/* Tokens */}
       <span
         className={cn(
           "w-24 shrink-0 font-mono text-sm font-semibold tabular-nums",
@@ -184,16 +162,21 @@ function TransactionRow({ tx }: { tx: Transaction }) {
             : "text-rose-600 dark:text-rose-400"
         )}
       >
-        {isDeposit ? "+" : "−"}${tx.amount.toLocaleString()}
+        {isDeposit ? "+" : "−"}{tx.tokens}
       </span>
 
-      {/* Reference */}
-      <span className="text-muted-foreground w-32 shrink-0 font-mono text-xs">
-        {tx.referenceNumber}
+      {/* Amount */}
+      <span className="text-muted-foreground w-24 shrink-0 font-mono text-xs tabular-nums">
+        ${usd(tx.amount)}
       </span>
 
-      {/* Notes */}
-      <span className="text-muted-foreground truncate text-xs">{tx.notes}</span>
+      {/* Status */}
+      <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", statusStyles[tx.status])}>
+        {tx.status}
+      </span>
+
+      {/* Date */}
+      <span className="text-muted-foreground truncate text-xs">{formatDate(tx.createdAt)}</span>
     </div>
   )
 }
@@ -214,27 +197,29 @@ function getPageNumbers(current: number, total: number): (number | "…")[] {
   return pages
 }
 
-function TransactionList() {
+function TransactionList({ transactions }: { transactions: Transaction[] }) {
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<FilterType>("all")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(5)
 
   const counts: Record<FilterType, number> = {
-    all: TRANSACTIONS.length,
-    deposit: TRANSACTIONS.filter((t) => t.type === "deposit").length,
-    withdrawal: TRANSACTIONS.filter((t) => t.type === "withdrawal").length,
+    all: transactions.length,
+    deposit: transactions.filter((t) => t.type === "DEPOSIT").length,
+    withdrawal: transactions.filter((t) => t.type === "WITHDRAWAL").length,
   }
 
-  const filtered = TRANSACTIONS.filter((tx) => {
-    if (filter !== "all" && tx.type !== filter) return false
+  const filtered = transactions.filter((tx) => {
+    if (filter === "deposit" && tx.type !== "DEPOSIT") return false
+    if (filter === "withdrawal" && tx.type !== "WITHDRAWAL") return false
     const q = search.toLowerCase().trim()
     if (!q) return true
     return (
-      tx.type.includes(q) ||
+      tx.type.toLowerCase().includes(q) ||
       String(tx.amount).includes(q) ||
-      tx.referenceNumber.toLowerCase().includes(q) ||
-      tx.notes.toLowerCase().includes(q)
+      String(tx.tokens).includes(q) ||
+      tx.status.toLowerCase().includes(q) ||
+      (tx.remark ?? "").toLowerCase().includes(q)
     )
   })
 
@@ -262,11 +247,10 @@ function TransactionList() {
     <Card className="gap-0 overflow-hidden py-0">
       {/* ── Toolbar ── */}
       <div className="space-y-2.5 border-b p-3">
-        {/* Search */}
         <div className="relative">
           <Search className="text-muted-foreground absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
           <Input
-            placeholder="Search by type, amount, reference, notes…"
+            placeholder="Search by type, amount, tokens, status…"
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             className="h-8 pl-8 pr-8 text-sm"
@@ -282,7 +266,6 @@ function TransactionList() {
           )}
         </div>
 
-        {/* Filter tabs */}
         <div className="flex gap-1.5">
           {(["all", "deposit", "withdrawal"] as FilterType[]).map((f) => (
             <button
@@ -316,13 +299,13 @@ function TransactionList() {
           Type
         </span>
         <span className="text-muted-foreground w-24 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
+          Tokens
+        </span>
+        <span className="text-muted-foreground w-24 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
           Amount
         </span>
-        <span className="text-muted-foreground w-32 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
-          Reference
-        </span>
         <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-widest">
-          Notes
+          Status / Date
         </span>
       </div>
 
@@ -343,23 +326,20 @@ function TransactionList() {
       ) : (
         <div className="divide-y">
           {paginated.map((tx) => (
-            <TransactionRow key={tx.id} tx={tx} />
+            <TransactionRow key={tx._id} tx={tx} />
           ))}
         </div>
       )}
 
       {/* ── Pagination footer ── */}
       <div className="bg-muted/20 flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
-        {/* Result count */}
         <p className="text-muted-foreground text-xs tabular-nums">
           {filtered.length === 0
             ? "No results"
             : `${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`}
         </p>
 
-        {/* Page controls */}
         <div className="flex items-center gap-1">
-          {/* Prev */}
           <button
             onClick={() => setPage((p) => p - 1)}
             disabled={currentPage === 1}
@@ -369,7 +349,6 @@ function TransactionList() {
             <ChevronLeft className="size-3.5" />
           </button>
 
-          {/* Page numbers */}
           {getPageNumbers(currentPage, totalPages).map((n, i) =>
             n === "…" ? (
               <span
@@ -394,7 +373,6 @@ function TransactionList() {
             )
           )}
 
-          {/* Next */}
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={currentPage === totalPages}
@@ -405,7 +383,6 @@ function TransactionList() {
           </button>
         </div>
 
-        {/* Rows per page */}
         <div className="flex items-center gap-1.5">
           <span className="text-muted-foreground text-xs">Rows</span>
           <div className="flex gap-1">
@@ -432,8 +409,8 @@ function TransactionList() {
 
 // ─── Profile Card ─────────────────────────────────────────────────────────────
 
-function ProfileCard() {
-  const initials = USER.name
+function ProfileCard({ profile }: { profile: Profile }) {
+  const initials = profile.name
     .split(" ")
     .map((n) => n[0])
     .join("")
@@ -443,26 +420,24 @@ function ProfileCard() {
   return (
     <Card>
       <CardContent className="pt-5">
-        {/* Avatar + name */}
         <div className="mb-4 flex items-center gap-3">
           <div className="bg-primary text-primary-foreground flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold">
             {initials}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{USER.name}</p>
-            <p className="text-muted-foreground truncate text-xs">{USER.email}</p>
+            <p className="truncate text-sm font-semibold">{profile.name}</p>
+            <p className="text-muted-foreground truncate text-xs">{profile.email}</p>
           </div>
         </div>
 
-        {/* Details */}
         <div className="space-y-2.5 border-t pt-4">
           <div className="flex items-center gap-2.5">
             <Mail className="text-muted-foreground size-3.5 shrink-0" />
-            <span className="text-muted-foreground truncate text-xs">{USER.email}</span>
+            <span className="text-muted-foreground truncate text-xs">{profile.email}</span>
           </div>
           <div className="flex items-center gap-2.5">
             <Phone className="text-muted-foreground size-3.5 shrink-0" />
-            <span className="text-muted-foreground text-xs">{USER.contactNo}</span>
+            <span className="text-muted-foreground text-xs">{profile.phone}</span>
           </div>
         </div>
 
@@ -481,34 +456,55 @@ function ProfileCard() {
 
 type ModalAction = "deposit" | "withdraw"
 
-function AmountModal({ action, onClose }: { action: ModalAction; onClose: () => void }) {
-  const [amount, setAmount] = useState("")
+function AmountModal({
+  action,
+  settings,
+  wallet,
+  onClose,
+  onSubmit,
+}: {
+  action: ModalAction
+  settings: PublicSettings | null
+  wallet: Wallet | null
+  onClose: () => void
+  onSubmit: (tokens: number) => Promise<void>
+}) {
+  const [tokens, setTokens] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const isDeposit = action === "deposit"
+  const tokenPrice = settings?.tokenPrice ?? wallet?.tokenPrice ?? 1
+  const parsed = Number(tokens)
+  const estimate = Number.isFinite(parsed) && parsed > 0 ? parsed * tokenPrice : 0
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    // TODO: wire up real submission
-    onClose()
+    setError(null)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setError("Enter a positive token amount.")
+      return
+    }
+    setBusy(true)
+    try {
+      await onSubmit(parsed)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed.")
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Dialog */}
       <Card className="relative z-10 w-full max-w-sm gap-0 overflow-hidden py-0">
-        {/* Accent stripe */}
-        <div
-          className={cn(
-            "h-1 w-full",
-            isDeposit ? "bg-emerald-500" : "bg-rose-500"
-          )}
-        />
+        <div className={cn("h-1 w-full", isDeposit ? "bg-emerald-500" : "bg-rose-500")} />
 
         <CardHeader className="border-b pt-5 pb-4">
           <div className="flex items-center gap-2.5">
@@ -531,30 +527,32 @@ function AmountModal({ action, onClose }: { action: ModalAction; onClose: () => 
 
         <CardContent className="pt-5 pb-5">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+            )}
             <div className="space-y-1.5">
-              <Label htmlFor="modal-amount">Amount</Label>
+              <Label htmlFor="modal-tokens">Tokens</Label>
               <Input
-                id="modal-amount"
+                id="modal-tokens"
                 type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                min="1"
+                step="1"
+                placeholder="0"
+                value={tokens}
+                onChange={(e) => setTokens(e.target.value)}
                 required
                 autoFocus
               />
+              {estimate > 0 && (
+                <p className="text-muted-foreground text-xs">≈ ${usd(estimate)}</p>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" size="sm" onClick={onClose}>
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={!amount || Number(amount) <= 0}
-              >
-                Submit
+              <Button type="submit" size="sm" disabled={busy || !tokens || parsed <= 0}>
+                {busy ? "Submitting…" : "Submit"}
               </Button>
             </div>
           </form>
@@ -569,15 +567,57 @@ function AmountModal({ action, onClose }: { action: ModalAction; onClose: () => 
 export function DashboardPage() {
   const navigate = useNavigate()
   const [modal, setModal] = useState<ModalAction | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [wallet, setWallet] = useState<Wallet | null>(null)
+  const [settings, setSettings] = useState<PublicSettings | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  function handleLogout() {
-    logout()
+  const refresh = useCallback(async () => {
+    const [w, txns] = await Promise.all([getWallet(), getTransactions()])
+    setWallet(w)
+    setTransactions(txns)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const [p, w, s, txns] = await Promise.all([
+          getProfile(),
+          getWallet(),
+          getSettings(),
+          getTransactions(),
+        ])
+        if (!active) return
+        setProfile(p)
+        setWallet(w)
+        setSettings(s)
+        setTransactions(txns)
+      } catch (err) {
+        if (!active) return
+        if (err instanceof ApiError && err.status === 401) {
+          navigate("/login", { replace: true })
+          return
+        }
+        setLoadError(err instanceof Error ? err.message : "Failed to load dashboard")
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [navigate])
+
+  async function handleLogout() {
+    await logout()
     navigate("/login")
   }
 
   return (
     <div className="bg-background text-foreground min-h-screen">
-      {/* Header */}
       <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-6 py-3">
         <span className="text-lg font-semibold tracking-tight">Sandy</span>
         <Button variant="outline" size="sm" onClick={handleLogout}>
@@ -585,49 +625,63 @@ export function DashboardPage() {
         </Button>
       </header>
 
-      {/* Content */}
       <main className="mx-auto max-w-5xl px-6 py-8">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {loading ? (
+          <p className="text-muted-foreground">Loading your dashboard…</p>
+        ) : loadError ? (
+          <p className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {loadError}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Left: wallet + transactions */}
+            <div className="space-y-5 lg:col-span-2">
+              {wallet && <WalletCard wallet={wallet} />}
 
-          {/* Left: wallet + transactions */}
-          <div className="space-y-5 lg:col-span-2">
-            <WalletCard />
-
-            <div>
-              <p className="text-muted-foreground mb-2.5 text-[10px] font-semibold uppercase tracking-widest">
-                Transaction History
-              </p>
-              <TransactionList />
-            </div>
-          </div>
-
-          {/* Right: actions + profile */}
-          <div className="space-y-4">
-            {/* Action buttons */}
-            <div className="space-y-2.5">
-              <Button
-                className="w-full gap-2"
-                onClick={() => setModal("deposit")}
-              >
-                <ArrowDownToLine className="size-4" />
-                Deposit
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full gap-2"
-                onClick={() => setModal("withdraw")}
-              >
-                <ArrowUpFromLine className="size-4" />
-                Withdraw
-              </Button>
+              <div>
+                <p className="text-muted-foreground mb-2.5 text-[10px] font-semibold uppercase tracking-widest">
+                  Transaction History
+                </p>
+                <TransactionList transactions={transactions} />
+              </div>
             </div>
 
-            <ProfileCard />
+            {/* Right: actions + profile */}
+            <div className="space-y-4">
+              <div className="space-y-2.5">
+                <Button className="w-full gap-2" onClick={() => setModal("deposit")}>
+                  <ArrowDownToLine className="size-4" />
+                  Deposit
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => setModal("withdraw")}
+                >
+                  <ArrowUpFromLine className="size-4" />
+                  Withdraw
+                </Button>
+              </div>
+
+              {profile && <ProfileCard profile={profile} />}
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
-      {modal && <AmountModal action={modal} onClose={() => setModal(null)} />}
+      {modal && (
+        <AmountModal
+          action={modal}
+          settings={settings}
+          wallet={wallet}
+          onClose={() => setModal(null)}
+          onSubmit={async (tokens) => {
+            if (modal === "deposit") await createDeposit(tokens)
+            else await createWithdrawal(tokens)
+            await refresh()
+          }}
+        />
+      )}
     </div>
   )
 }

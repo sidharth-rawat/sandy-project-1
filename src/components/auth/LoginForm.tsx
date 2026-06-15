@@ -1,9 +1,10 @@
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { login } from "@/lib/auth"
+import { ApiError } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,25 +19,39 @@ import {
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Must be a valid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginForm() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const justVerified = (location.state as { verified?: boolean } | null)?.verified
 
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   })
 
-  async function onSubmit(_data: LoginFormValues) {
-    login()
-    navigate("/dashboard")
+  async function onSubmit(data: LoginFormValues) {
+    try {
+      await login(data.email, data.password)
+      navigate("/dashboard")
+    } catch (err) {
+      // An unverified account (403) should be routed to the verification step.
+      if (err instanceof ApiError && err.status === 403) {
+        navigate("/verify", { state: { email: data.email } })
+        return
+      }
+      setError("root", {
+        message: err instanceof Error ? err.message : "Login failed. Try again.",
+      })
+    }
   }
 
   return (
@@ -51,6 +66,16 @@ export function LoginForm() {
 
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+            {justVerified && !errors.root && (
+              <p className="rounded-md bg-emerald-100 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                Email verified — you can now sign in.
+              </p>
+            )}
+            {errors.root && (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {errors.root.message}
+              </p>
+            )}
             {/* Email */}
             <div className="space-y-1">
               <Label htmlFor="email">Email</Label>

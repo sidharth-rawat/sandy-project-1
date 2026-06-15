@@ -11,4 +11,16 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      // Forward /api requests to the backend server-side, sidestepping CORS in dev.
+      "/api": {
+        target: "https://sandy-project-1-bd.onrender.com",
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
 })

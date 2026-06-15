@@ -1,0 +1,22 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Proxy API calls to the backend so the browser stays same-origin (/api),
+# avoiding CORS in production. Must come BEFORE the SPA fallback below —
+# Netlify applies the first matching rule.
+[[redirects]]
+  from = "/api/*"
+  to = "https://sandy-project-1-bd.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback: serve index.html for any non-file route so React Router
+# can handle client-side navigation (fixes 404 on refresh / deep links).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
