@@ -134,19 +134,19 @@ function TransactionRow({ tx }: { tx: Transaction }) {
   const isDeposit = tx.type === "DEPOSIT"
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/40">
+    <div className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40">
       {/* Icon */}
       <div
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
           isDeposit
             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
             : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
         )}
       >
         {isDeposit
-          ? <ArrowDownToLine className="size-3.5" />
-          : <ArrowUpFromLine className="size-3.5" />
+          ? <ArrowDownToLine className="size-3" />
+          : <ArrowUpFromLine className="size-3" />
         }
       </div>
 
@@ -156,7 +156,7 @@ function TransactionRow({ tx }: { tx: Transaction }) {
       {/* Tokens */}
       <span
         className={cn(
-          "w-24 shrink-0 font-mono text-sm font-semibold tabular-nums",
+          "w-14 shrink-0 font-mono text-sm font-semibold tabular-nums",
           isDeposit
             ? "text-emerald-600 dark:text-emerald-400"
             : "text-rose-600 dark:text-rose-400"
@@ -166,7 +166,7 @@ function TransactionRow({ tx }: { tx: Transaction }) {
       </span>
 
       {/* Amount */}
-      <span className="text-muted-foreground w-24 shrink-0 font-mono text-xs tabular-nums">
+      <span className="text-muted-foreground w-20 shrink-0 font-mono text-xs tabular-nums">
         ${usd(tx.amount)}
       </span>
 
@@ -175,8 +175,13 @@ function TransactionRow({ tx }: { tx: Transaction }) {
         {tx.status}
       </span>
 
+      {/* Remark */}
+      <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs italic">
+        {tx.remark ?? "—"}
+      </span>
+
       {/* Date */}
-      <span className="text-muted-foreground truncate text-xs">{formatDate(tx.createdAt)}</span>
+      <span className="text-muted-foreground w-24 shrink-0 text-xs">{formatDate(tx.createdAt)}</span>
     </div>
   )
 }
@@ -244,9 +249,9 @@ function TransactionList({ transactions }: { transactions: Transaction[] }) {
   }
 
   return (
-    <Card className="gap-0 overflow-hidden py-0">
+    <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
       {/* ── Toolbar ── */}
-      <div className="space-y-2.5 border-b p-3">
+      <div className="shrink-0 space-y-2.5 border-b p-3">
         <div className="relative">
           <Search className="text-muted-foreground absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
           <Input
@@ -293,25 +298,31 @@ function TransactionList({ transactions }: { transactions: Transaction[] }) {
       </div>
 
       {/* ── Column headers ── */}
-      <div className="bg-muted/40 flex items-center gap-4 border-b px-4 py-2.5">
-        <span className="w-8 shrink-0" />
+      <div className="bg-muted/40 flex shrink-0 items-center gap-3 border-b px-4 py-2.5">
+        <span className="w-7 shrink-0" />
         <span className="text-muted-foreground w-20 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
           Type
         </span>
-        <span className="text-muted-foreground w-24 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
+        <span className="text-muted-foreground w-14 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
           Tokens
         </span>
-        <span className="text-muted-foreground w-24 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
+        <span className="text-muted-foreground w-20 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
           Amount
         </span>
-        <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-widest">
-          Status / Date
+        <span className="text-muted-foreground shrink-0 text-[10px] font-semibold uppercase tracking-widest">
+          Status
+        </span>
+        <span className="text-muted-foreground min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-widest">
+          Remark
+        </span>
+        <span className="text-muted-foreground w-24 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
+          Date
         </span>
       </div>
 
       {/* ── Rows / empty state ── */}
       {paginated.length === 0 ? (
-        <div className="flex flex-col items-center py-12">
+        <div className="flex flex-1 flex-col items-center justify-center py-12">
           <Search className="text-muted-foreground/30 mb-3 size-8" />
           <p className="text-muted-foreground text-sm">No matching transactions.</p>
           {search && (
@@ -324,7 +335,7 @@ function TransactionList({ transactions }: { transactions: Transaction[] }) {
           )}
         </div>
       ) : (
-        <div className="divide-y">
+        <div className="flex-1 divide-y overflow-y-auto">
           {paginated.map((tx) => (
             <TransactionRow key={tx._id} tx={tx} />
           ))}
@@ -332,7 +343,7 @@ function TransactionList({ transactions }: { transactions: Transaction[] }) {
       )}
 
       {/* ── Pagination footer ── */}
-      <div className="bg-muted/20 flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+      <div className="bg-muted/20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
         <p className="text-muted-foreground text-xs tabular-nums">
           {filtered.length === 0
             ? "No results"
@@ -617,15 +628,15 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="bg-background text-foreground min-h-screen">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-6 py-3">
+    <div className="bg-background text-foreground flex h-screen flex-col">
+      <header className="shrink-0 flex items-center justify-between border-b bg-background px-6 py-3">
         <span className="text-lg font-semibold tracking-tight">Sandy</span>
         <Button variant="outline" size="sm" onClick={handleLogout}>
           Logout
         </Button>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-8">
+      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-6 py-8">
         {loading ? (
           <p className="text-muted-foreground">Loading your dashboard…</p>
         ) : loadError ? (
@@ -633,13 +644,13 @@ export function DashboardPage() {
             {loadError}
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-3">
             {/* Left: wallet + transactions */}
-            <div className="space-y-5 lg:col-span-2">
-              {wallet && <WalletCard wallet={wallet} />}
+            <div className="flex min-h-0 flex-col gap-5 lg:col-span-2">
+              {wallet && <div className="shrink-0"><WalletCard wallet={wallet} /></div>}
 
-              <div>
-                <p className="text-muted-foreground mb-2.5 text-[10px] font-semibold uppercase tracking-widest">
+              <div className="flex min-h-0 flex-1 flex-col">
+                <p className="text-muted-foreground mb-2.5 shrink-0 text-[10px] font-semibold uppercase tracking-widest">
                   Transaction History
                 </p>
                 <TransactionList transactions={transactions} />
