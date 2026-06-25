@@ -36,4 +36,4 @@ jobs:
 
       - name: Sync to S3
         run: |
-          aws s3 sync dist/ s3://trilium-app-frontend --delete
+          aws s3 sync dist/ s3://app.triliumtokens.com --delete
